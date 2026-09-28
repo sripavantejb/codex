@@ -133,7 +133,7 @@ impl TranscriptView {
         }
     }
 
-    pub(super) fn toggle_disclosure_at(
+    pub(crate) fn toggle_disclosure_at(
         &mut self,
         cells: &[Arc<dyn HistoryCell>],
         column: u16,

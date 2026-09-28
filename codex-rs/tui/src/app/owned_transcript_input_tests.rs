@@ -701,3 +701,68 @@ async fn transcript_shortcut_stays_available_over_patch_approval() -> Result<()>
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn transcript_disclosure_stays_clickable_over_patch_approval() -> Result<()> {
+    use crate::exec_cell::CommandOutput;
+    use crate::exec_cell::new_active_exec_command;
+    use codex_app_server_protocol::CommandExecutionSource;
+
+    let (mut app, _events, _operations) = make_test_app_with_channels().await;
+    let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    tui.set_owned_screen(/*owned*/ true)?;
+    let size = tui.terminal.size()?;
+    let mut cell = new_active_exec_command(
+        "output-test".into(),
+        vec!["echo".into()],
+        Vec::new(),
+        CommandExecutionSource::Agent,
+        /*interaction_input*/ None,
+        /*animations_enabled*/ false,
+    );
+    cell.complete_call(
+        "output-test",
+        CommandOutput::new(/*exit_code*/ 0, "1\n2\n3\n4\n5\n6\n7\n8\n".into()),
+        std::time::Duration::ZERO,
+    );
+    app.transcript_cells = vec![Arc::new(cell)];
+    app.chat_widget
+        .push_approval_request(ApprovalRequest::ApplyPatch(ApplyPatchApprovalRequest {
+            thread_id: ThreadId::new(),
+            thread_label: None,
+            id: "patch".to_string(),
+            reason: None,
+            cwd: app.config.cwd.clone(),
+            changes: HashMap::new(),
+        }));
+    app.render_owned_transcript(&mut tui, size)?;
+    let collapsed = screen(&tui);
+    let (row, column) = collapsed
+        .lines()
+        .enumerate()
+        .find_map(|(row, line)| {
+            let column = line.find("+ 5 lines")?;
+            Some((row as u16, line[..column].chars().count() as u16))
+        })
+        .expect("folded output should show a disclosure control");
+
+    app.handle_tui_event(
+        &mut tui,
+        &mut server,
+        pointer_event(MouseEventKind::Down(MouseButton::Left), column, row),
+    )
+    .await?;
+    app.render_owned_transcript(&mut tui, size)?;
+
+    assert_eq!(
+        (
+            screen(&tui).contains("Show less"),
+            app.chat_widget.has_active_modal()
+        ),
+        (true, true)
+    );
+    tui.set_owned_screen(/*owned*/ false)?;
+    server.shutdown().await?;
+    Ok(())
+}

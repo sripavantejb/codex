@@ -375,6 +375,25 @@ impl App {
                                 | crossterm::event::MouseEventKind::ScrollDown
                         )
                 );
+            // Approvals keep folded transcript details expandable so the user can review the
+            // context before deciding; any other click stays with the modal.
+            if let TuiEvent::Mouse(mouse) = event
+                && mouse.kind
+                    == crossterm::event::MouseEventKind::Down(crossterm::event::MouseButton::Left)
+                && mouse.modifiers.is_empty()
+                && self
+                    .chat_widget
+                    .keymap_contexts()
+                    .contains(KeymapContext::Approval)
+                && self.transcript_view.toggle_disclosure_at(
+                    &self.transcript_cells,
+                    mouse.column,
+                    mouse.row,
+                )
+            {
+                tui.frame_requester().schedule_frame();
+                return Ok(true);
+            }
             if !is_modal_scroll {
                 return Ok(false);
             }
