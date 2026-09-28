@@ -543,9 +543,26 @@ impl App {
             return;
         }
 
+        // Approvals keep the transcript reachable because deciding often needs the surrounding
+        // context. The owned transcript ignores keys while a modal is open, so close it here.
+        let approval_active = self.overlay.is_none()
+            && self
+                .chat_widget
+                .keymap_contexts()
+                .contains(crate::keymap::KeymapContext::Approval);
+        if approval_active
+            && tui.is_owned_screen()
+            && self.transcript_view.is_detailed()
+            && self.keymap.pager.close_transcript.is_pressed(key_event)
+        {
+            self.close_transcript_overlay(tui);
+            return;
+        }
+
+        let open_transcript = self.keymap.app.open_transcript.is_pressed(key_event);
         let find_transcript = self.keymap.app.find_transcript.is_pressed(key_event);
-        if app_keymap_shortcuts_available
-            && (self.keymap.app.open_transcript.is_pressed(key_event) || find_transcript)
+        if (app_keymap_shortcuts_available && (open_transcript || find_transcript))
+            || (approval_active && open_transcript)
         {
             self.scrollback_has_older_history = self
                 .chat_widget

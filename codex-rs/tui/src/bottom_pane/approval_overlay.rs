@@ -659,6 +659,19 @@ fn approval_footer_hint(
         }
         spans.extend([open_thread.into(), " to open thread".into()]);
     }
+    // Patch headers list only destinations, so they are rarely clipped and the header's
+    // "view all" hint never appears; the diff itself is only reachable through fullscreen.
+    if matches!(request, ApprovalRequest::ApplyPatch(_))
+        && let Some(open_fullscreen) =
+            approval_keymap.primary_hint("open_fullscreen", &approval_keymap.open_fullscreen)
+    {
+        if !spans.is_empty() {
+            spans.push(" or ".into());
+        } else {
+            spans.push("Press ".into());
+        }
+        spans.extend([open_fullscreen.into(), " to view the full diff".into()]);
+    }
     Line::from(spans)
 }
 

@@ -658,3 +658,46 @@ async fn modified_arrows_and_editor_chords_resume_composer_movement() -> Result<
     tui.set_owned_screen(/*owned*/ false)?;
     Ok(())
 }
+
+#[tokio::test]
+async fn transcript_shortcut_stays_available_over_patch_approval() -> Result<()> {
+    let ctrl_t = || TuiEvent::Key(KeyEvent::new(KeyCode::Char('t'), KeyModifiers::CONTROL));
+    for owned in [true, false] {
+        let (mut app, _events, _operations) = make_test_app_with_channels().await;
+        let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+        let mut tui = crate::tui::test_support::make_test_tui()?;
+        tui.set_owned_screen(owned)?;
+        app.chat_widget
+            .push_approval_request(ApprovalRequest::ApplyPatch(ApplyPatchApprovalRequest {
+                thread_id: ThreadId::new(),
+                thread_label: None,
+                id: "patch".to_string(),
+                reason: None,
+                cwd: app.config.cwd.clone(),
+                changes: HashMap::new(),
+            }));
+
+        let mut states = Vec::new();
+        for _ in 0..2 {
+            app.handle_tui_event(&mut tui, &mut server, ctrl_t())
+                .await?;
+            states.push((
+                app.transcript_view.is_detailed(),
+                matches!(app.overlay, Some(Overlay::Transcript(_))),
+                app.chat_widget.has_active_modal(),
+            ));
+        }
+        // Owned mode toggles the detailed transcript in place; terminal mode opens and closes
+        // the transcript pager. Either way the approval stays pending underneath.
+        let expected = if owned {
+            vec![(true, false, true), (false, false, true)]
+        } else {
+            vec![(false, true, true), (false, false, true)]
+        };
+        assert_eq!(states, expected, "owned: {owned}");
+
+        tui.set_owned_screen(/*owned*/ false)?;
+        server.shutdown().await?;
+    }
+    Ok(())
+}
